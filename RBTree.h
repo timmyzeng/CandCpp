@@ -1,223 +1,333 @@
-/*************************************************************************
-	> File Name: RBTree.h
-	> Author: Timmy
-	> Created Time: 2018年03月29日 星期四 16时19分49秒
- ************************************************************************/
+#pragma once
 
 #include <iostream>
 
 using namespace std;
 
-enum color{
-    RED,
-    BLACK
-};
+enum Color{RED, BLACK};
 
-template <class K, class V>
+template <class V>
 struct RBTreeNode{
-    K _key;
-    V _value;
-    color _col;
-    RBTreeNode<K, V>* _left;
-    RBTreeNode<K, V>* _right;
-    RBTreeNode<K, V>* _parent;
+    RBTreeNode<V>* _left;
+    RBTreeNode<V>* _right;
+    RBTreeNode<V>* _parent;
 
-    RBTreeNode(const K& key, const V& value)
-        :_key(key)
-        ,_value(value)
-        ,_col(RED)
-        ,_left(NULL)
-        ,_right(NULL)
-        ,_parent(NULL)
+    V _v;
+    Color _col;
+
+    RBTreeNode(const V& v)
+        :_v(v)
+         ,_left(NULL)
+         ,_right(NULL)
+         ,_parent(NULL)
+         ,_col(RED)
     {}
 };
 
-template <class K, class V>
+template<class V, class Ref, class Ptr>
+struct __RBTreeIterator{
+    typedef RBTreeNode<V> Node;
+    typedef __RBTreeIterator<V, Ref, Ptr> Self;
+    Node* _node;
+
+    __RBTreeIterator()
+    {}
+
+    __RBTreeIterator(Node* node)
+        :_node(node)
+    {}
+
+    Ref operator*(){
+        return _node->_v;
+    }
+
+    Ptr operator->(){
+        return &(operator*());
+    }
+
+    Self operator++(){
+        if(_node->_right){
+            _node = _node->_right;
+            while(_node->_left){
+                _node = _node->_left;
+            }
+        }
+        else{
+            Node* cur = _node;
+            Node* parent = cur->_parent;
+            while(parent && parent->_right == cur){
+                cur = parent;
+                parent = cur->_parent;
+            }
+            _node = parent;
+        }
+        return *this;
+    }
+
+    Self operator++(int){
+        Self tmp(*this);
+        ++ (*this);
+        return tmp;
+    }
+
+    bool operator!=(const Self& s){
+        return _node != s._node;
+    }
+
+    Self operator--(){
+        if(_node->_left){
+            _node = _node->_left;
+            while(_node->_right){
+                _node = _node->_right;
+            }
+        }
+        else{
+            Node* cur = _node;
+            Node* parent = cur->_parent;
+
+            while(parent && parent->_left == cur){
+                cur = parent;
+                parent = cur->_parent;
+            }
+            _node = parent;
+        }
+        return *this;
+    }
+
+    Self operator--(int){
+        Self tmp(*this);
+        ++ (*this);
+        return tmp;
+    }
+};
+
+template <class K>
+struct SetKeyOfValue{
+    const K& operator()(const K& key){
+        return key;
+    }
+};
+
+template <class K, class V>//pair<K,V>
+struct MapKeyOfValue{
+    const K& operator()(const pair<K,V>& kv){
+        return kv.first;
+    }
+};
+
+template<class K, class V, class KeyOfValue>
 class RBTree{
-typedef RBTreeNode<K, V> Node;
+    typedef RBTreeNode<V> Node;
 public:
-    //constructor
+    typedef __RBTreeIterator<V, V&, V*> Iterator;
+    typedef __RBTreeIterator<V, const V&, const V*> ConstIterator;
+
     RBTree()
         :_root(NULL)
     {}
-    //Insert
-    bool Insert(const K& key, const V& value){
-        if(_root == NULL){
-            _root = new Node(key, value);
-            _root->_col = BLACK;
-            return true;
-        }
+
+    Iterator Begin(){
         Node* cur = _root;
-        Node* parent = NULL;
-        //find the locationg to insert Node
+        while(cur->_left){
+            cur = cur->_left;
+        }
+        return cur;
+    }
+
+    Iterator End(){
+        return NULL;
+    }
+
+    pair<Iterator, bool> Insert(const V& v){
+        if(_root == NULL){
+            _root = new Node(v);
+            _root->_col = BLACK;
+            return make_pair(Iterator(_root), true);
+        }
+
+        Node* cur = _root;
+        Node* parent;
+        KeyOfValue kov;
         while(cur){
-            if(cur->_key < key){
+            if(kov(cur->_v) < kov(v)){
                 parent = cur;
                 cur = cur->_right;
             }
-            else if(cur->_key > key){
+            else if(kov(cur->_v) > kov(v)){
                 parent = cur;
                 cur = cur->_left;
             }
             else{
-                return false;
+                return make_pair(Iterator(cur), false);
             }
         }
-        //insert
-        //link cur and parent
-        cur = new Node(key, value);
-        if(parent->_key < key){
-            parent->_right = cur;
+
+        cur = new Node(v);
+        Node* ret = cur;
+        if(kov(cur->_v) < kov(parent->_v)){
+            parent->_left = cur;
+            cur->_parent = parent;
         }
         else{
-            parent->_left = cur;
+            parent->_right = cur;
+            cur->_parent = parent;
         }
-        cur->_parent = parent;
-        //if parent == NULL,stop
+
         while(parent && parent->_col == RED){
-            Node* grandfather = parent->_parent;
-            //parent == grandfather->_left
-            if(parent == grandfather->_left){
-                Node* uncle = grandfather->_right;
+            Node* grandparent = parent->_parent;
+            if(grandparent->_left == parent){
+                Node* uncle = grandparent->_right;
                 if(uncle && uncle->_col == RED){
                     parent->_col = BLACK;
                     uncle->_col = BLACK;
-                    grandfather->_col = RED;
-                    //continue
-                    cur = grandfather;
+                    cur = grandparent;
                     parent = cur->_parent;
                 }
                 else{
-                    if(cur == parent->_right){
+                    if(parent->_right == cur){
                         RotateL(parent);
+                        swap(parent, cur);
                     }
-                    RotateR(grandfather);
+                    RotateR(grandparent);
                     parent->_col = BLACK;
-                    grandfather->_col = RED;
+                    grandparent->_col = RED;
                 }
             }
-            //parent == grandfather->_right
             else{
-                Node* uncle = grandfather->_left;
+                Node* uncle = grandparent->_left;
                 if(uncle && uncle->_col == RED){
-                    parent->_col = uncle->_col = BLACK;
-                    grandfather->_col = RED;
-                    //contine
-                    cur = grandfather;
+                     parent->_col = BLACK;
+                    uncle->_col = BLACK;
+                    cur = grandparent;
                     parent = cur->_parent;
-                }
+               }
                 else{
-                    if(cur == parent->_left){
+                     if(parent->_left== cur){
                         RotateR(parent);
+                        swap(parent, cur);
                     }
-                    RotateL(grandfather);
+                    RotateL(grandparent);
                     parent->_col = BLACK;
-                    grandfather->_col = RED;
-                }
-            }
+                    grandparent->_col = RED;
+               }
+           }
         }
-        _root->_col = BLACK;
-        return true;
+        return make_pair(Iterator(ret), true);
     }
-    //RotateL
-    void RotateL(Node* cur){
-        Node* subR = cur->_right;
-        Node* subRL = subR->_left;
-        
-        cur->_right = subRL;
-        if(subRL){
-            subRL->_parent = cur;
-        }
-        Node* ppNode = cur->_parent;
-        cur->_parent = subR;
-        subR->_left = cur;
-        if(ppNode == NULL){
-            _root = subR;
-            _root->_parent = NULL;
-        }
-        else{
-            subR->_parent = ppNode;
-            if(ppNode->_left == cur){
-                ppNode->_left = subR;
-            }
-            else{
-                ppNode->_right = subR;
-            }
-        }
-    }
-    //RotateR
-    void RotateR(Node* cur){
-        Node* subL = cur->_left;
+
+	void RotateR(Node* parent){
+        Node* subL = parent->_left;
         Node* subLR = subL->_right;
-        
-        cur->_left = subLR;
-        if(subLR){
-            subLR->_parent = cur;
+        Node* ppnode = parent->_parent;
+
+        parent->_left = subLR;
+        if(subLR)
+            subLR->_parent = parent;
+
+        subL->_right = parent;
+        parent->_parent = subL;
+        //parent == _root
+        if(ppnode){
+            if(ppnode->_left == parent)
+                ppnode->_left = subL;
+            else
+                ppnode->_right = subL;
+
+            subL->_parent = ppnode;
         }
-        Node* ppNode = cur->_parent;
-        cur->_parent = subL;
-        subL->_right = cur;
-        if(ppNode == NULL){
+        else
             _root = subL;
-            _root->_parent = NULL;
-        }
-        else{
-            if(ppNode->_left == cur){
-                ppNode->_left = subL;
-            }
-            else{
-                ppNode->_right = subL;
-            }
-        }
+
+        _root->_parent = NULL;
     }
-    //IsBalance
-    bool IsBalance(){
-        //_root == RED
-        if(_root && _root->_col == RED){
-            cout << "wrong color in root" << endl;
-            return false;
+
+	void RotateL(Node* parent){
+        Node* subR = parent->_right;
+        Node* subRL = subR->_left;
+        Node* ppnode = parent->_parent;
+
+        parent->_right = subRL;
+        if(subRL)
+            subRL->_parent = parent;
+
+        parent->_parent = subR;
+        subR->_left = parent;
+        //parent == _root
+        if(ppnode){
+            if(ppnode->_left == parent)
+                ppnode->_left = subR;
+            else
+                ppnode->_right = subR;
+
+            subR->_parent = ppnode;
         }
-        size_t Num = 0;
-        size_t BlackNum = 0;
+        else
+            _root = subR;
+
+        _root->_parent = NULL;
+    }
+
+    Iterator Find(const K& key){
+        KeyOfValue kov;
         Node* cur = _root;
         while(cur){
-            if(cur->_col == BLACK){
-                ++ Num;
+            if(kov(cur->_v) == key){
+                return Iterator(cur);
             }
-            cur = cur->_left;
+            
+            if(kov(cur->_v) < key)
+                cur = cur->_right;
+            else
+                cur = cur->_left;
         }
-        return _IsBalance(_root, Num, BlackNum);
+        return End(); 
     }
-    bool _IsBalance(Node* cur, const size_t Num, size_t BlackNum){
-        if(cur == NULL){
-            //blacknum == Num(base blacknum)
-            if(Num != BlackNum){
-                cout << "wrong black number" << endl;
-                return false;
-            }
+
+    bool IsBalance(){
+        if(_root == NULL)
             return true;
-        }
-        //two RED Node
-        if(cur->_col == RED && cur->_parent->_col == RED){
-            cout << "two red node:" << cur->_key << endl;
+        if(_root->_col == RED){
+            cout << "root's color is red" << endl;
             return false;
         }
-        if(cur->_col == BLACK){
-            ++ BlackNum;
+
+        Node* cur = _root;
+        int base = 0;
+        int blacknum = 0;
+        while(cur){
+            if(cur->_col == BLACK)
+                ++ base;
+            cur = cur->_left;
         }
-        _IsBalance(cur->_left, Num , BlackNum);
-        _IsBalance(cur->_right, Num , BlackNum);
+
+        return _IsBalance(_root, base, blacknum);
     }
+
+    bool _IsBalance(Node* cur, const int base, int blacknum){
+        if(cur == NULL){
+            if(blacknum == base)
+                return true;
+            else{
+                cout << "wrong blacknum" << endl;
+                return false;
+            }
+        }
+
+        Node* parent = NULL;
+        parent = cur->_parent;
+
+        if(cur->_col == BLACK)
+            ++ blacknum;
+        else
+            if(parent && parent->_col == RED){
+                KeyOfValue kov;
+                cout << "two red node:" << kov(cur->_v) << endl;
+            }
+
+        return _IsBalance(cur->_left, base, blacknum)
+            && _IsBalance(cur->_right, base, blacknum);
+    }
+
 private:
     Node* _root;
 };
-
-void TestRBTree(){
-    RBTree<int, int> rbtree;
-    int arr1[] = {1,2,3,4,5};
-    int arr2[] = {4, 2, 6, 1, 3, 5, 15, 7, 16, 14};
-    for(int i = 0; i < sizeof(arr2)/sizeof(arr2[0]); ++i){
-        rbtree.Insert(arr2[i], arr2[i]);
-    }
-    cout << "IsBalance?" << rbtree.IsBalance() << endl;
-}
